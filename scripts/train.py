@@ -25,11 +25,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--consensus-weight", type=float, default=0.0)
     parser.add_argument("--adv", action="store_true", help="Enable adversarial training")
-    parser.add_argument("--adv-epsilon", type=float, default=0.05, help="ℓ∞ bound on the diffeomorphism velocity")
-    parser.add_argument("--adv-epsilon-log", type=float, default=0.1, help="Bound on the log-derivative energy")
-    parser.add_argument("--adv-steps", type=int, default=3, help="Number of PGD steps for the adversary")
-    parser.add_argument("--adv-step-size", type=float, default=0.02, help="Step size for the adversary update")
-    parser.add_argument("--adv-cutoff", type=float, default=0.45, help="Low-pass cutoff used before warping")
     parser.add_argument("--device", type=str, default="cpu")
     return parser.parse_args()
 
@@ -61,14 +56,7 @@ def main() -> None:
         calendar_features=["sin_time", "cos_time"],
         calendar_period=args.length,
     )
-    adversarial = AdversarialConfig(
-        enabled=args.adv,
-        epsilon=args.adv_epsilon,
-        epsilon_log=args.adv_epsilon_log,
-        steps=args.adv_steps,
-        step_size=args.adv_step_size,
-        cutoff=args.adv_cutoff,
-    )
+    adversarial = AdversarialConfig(enabled=args.adv)
     config = TrainConfig(
         epochs=args.epochs,
         device=args.device,

@@ -16,13 +16,11 @@ extended independently.
 - Learnable calendar alignment flow combining soft permutations, affine
   normalisation and differentiable seasonal phase shifts.
 - Sliding-window moment stabilisation, STFT-based soft anchors, pairwise
-  consensus energy, MDL-style segmentation penalties and H-disc low-pass checks
-  for canonical alignment.
+  consensus energy and H-disc low-pass checks for canonical alignment.
 - Stable linear state space model with learnable control kernels.
 - Spectrally normalised residual MLP enforcing small Lipschitz constants.
-- Training utilities with configurable regularisation weights, MDL penalty
-  controls, adversarial diffeomorphism perturbations, consensus gates and
-  gradient clipping.
+- Training utilities with configurable regularisation weights, adversarial
+  diffeomorphism perturbations, consensus gates and gradient clipping.
 - Validation helpers for MAE/RMSE assessment and a risk-difference gate based on
   statistical predictive intervals.
 - Block conformal calibration utilities that operate in the canonical domain
@@ -59,8 +57,6 @@ src/time_series_omega/
   data/              # dataset abstractions and rolling window helpers
   transforms/        # gauge components: time warp, value transform, calendar
   losses/            # canonical domain regularisers
-  segmentation/      # MDL penalties and segment diagnostics
-  robustness/        # diffeomorphic adversarial utilities
   models/            # stable SSM, Lipschitz residual and wrapper module
   training/          # trainer and configuration dataclasses
 scripts/
@@ -75,9 +71,8 @@ architecture, or experimenting with alternate gauge constraints).
 ## Extending the Framework
 
 The code base now includes differentiable calendar flows, adversarial diffeo
-training, consensus-aware regularisation, MDL-style segmentation penalties and
-low-pass anti-alias checks. The architecture remains modular so that
-researchers can plug in alternate state space blocks, conformal calibration
-heads or full segmentation search procedures with minimal friction.
-Contributions and pull requests are welcome.
+training, consensus-aware regularisation and low-pass anti-alias checks. The
+architecture remains modular so that researchers can plug in alternate state
+space blocks, conformal calibration heads or segmentation objectives with
+minimal friction. Contributions and pull requests are welcome.
 

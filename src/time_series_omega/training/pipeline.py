@@ -11,10 +11,6 @@ from torch.utils.data import DataLoader
 
 from ..data.datasets import SequenceBatch
 from ..models.sff_omega import SFFOmega
-from ..robustness.diffeo import (
-    DiffeomorphicAdversary,
-    DiffeomorphismConstraints,
-)
 
 
 @dataclass
@@ -24,7 +20,6 @@ class AdversarialConfig:
     epsilon_log: float = 0.05
     steps: int = 3
     step_size: float = 0.02
-    cutoff: float = 0.45
 
 
 @dataclass
@@ -39,9 +34,6 @@ class TrainConfig:
     consensus_weight: float = 0.0
     calendar_weight: float = 0.1
     h_disc_weight: float = 0.1
-    mdl_structure_weight: float = 0.1
-    mdl_curvature_weight: float = 0.1
-    mdl_log_derivative_weight: float = 0.1
     grad_clip: Optional[float] = 1.0
     adversarial: AdversarialConfig = field(default_factory=AdversarialConfig)
 
@@ -52,18 +44,6 @@ class Trainer:
         self.config = config
         self.optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
         self.loss_fn = nn.MSELoss()
-        self._adversary = None
-        if config.adversarial.enabled:
-            constraints = DiffeomorphismConstraints(
-                epsilon_inf=config.adversarial.epsilon,
-                epsilon_log=config.adversarial.epsilon_log,
-            )
-            self._adversary = DiffeomorphicAdversary(
-                steps=config.adversarial.steps,
-                step_size=config.adversarial.step_size,
-                cutoff=config.adversarial.cutoff,
-                constraints=constraints,
-            )
 
     def _adversarial_perturb(
         self,
@@ -72,10 +52,23 @@ class Trainer:
     ) -> torch.Tensor:
         if not self.config.adversarial.enabled:
             return series
-        if self._adversary is None:
-            return series
-        target = series[:, -self.model.horizon :]
-        return self._adversary.perturb(self.model, series, mask=mask, target=target)
+        adv = series.clone().detach().requires_grad_(True)
+        epsilon = self.config.adversarial.epsilon
+        epsilon_log = self.config.adversarial.epsilon_log
+        step_size = self.config.adversarial.step_size
+        for _ in range(self.config.adversarial.steps):
+            pred = self.model(adv, mask=mask)
+            target = series[:, -self.model.horizon :]
+            loss = self.loss_fn(pred, target)
+            grad = torch.autograd.grad(loss, adv, retain_graph=False, create_graph=False)[0]
+            adv = adv + step_size * torch.sign(grad)
+            delta = adv - series
+            delta = torch.clamp(delta, -epsilon, epsilon)
+            adv = torch.clamp(series + delta, series.min() - epsilon_log, series.max() + epsilon_log)
+            if mask is not None:
+                adv = adv * mask
+            adv = adv.detach().requires_grad_(True)
+        return adv.detach()
 
     def step(self, batch: SequenceBatch, template: Optional[torch.Tensor] = None) -> Dict[str, float]:
         self.model.train()
@@ -89,9 +82,6 @@ class Trainer:
         regs = self.model.regularisation(adv_series, covariates=covariates, mask=mask, template=template, cohort=gauge.canonical)
         loss = loss + self.config.smoothness_weight * regs["smoothness"]
         loss = loss + self.config.moments_weight * regs["moments"]
-        loss = loss + self.config.mdl_structure_weight * regs["mdl_structure"]
-        loss = loss + self.config.mdl_curvature_weight * regs["mdl_curvature"]
-        loss = loss + self.config.mdl_log_derivative_weight * regs["mdl_log_derivative"]
         if "soft_anchor" in regs:
             loss = loss + self.config.soft_anchor_weight * regs["soft_anchor"]
         if "consensus" in regs and self.config.consensus_weight > 0:

@@ -14,7 +14,6 @@ from ..losses.regularizers import (
     low_pass_filter,
     time_warp_penalty,
 )
-from ..segmentation.mdl import mdl_penalty
 from ..transforms.calendar import CalendarAlignment
 from ..transforms.time_warp import MonotoneTimeWarp, WarpDiagnostics
 from ..transforms.value_transform import MonotoneRQTransform
@@ -129,12 +128,6 @@ class SFFOmega(nn.Module):
             "smoothness": time_warp_penalty(self.time_warp),
             "moments": self.sliding_moments(gauge.canonical.unsqueeze(-1)),
         }
-        mdl_terms = mdl_penalty(
-            self.time_warp,
-            self.value_transform,
-            length=gauge.canonical.shape[1],
-        )
-        reg.update(mdl_terms)
         if template is not None:
             reg["soft_anchor"] = self.soft_anchor(gauge.canonical.unsqueeze(-1), template)
         if cohort is not None:
