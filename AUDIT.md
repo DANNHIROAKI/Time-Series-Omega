@@ -63,13 +63,6 @@ performed after integrating the changes in this commit.
    - **Extended gating:** adding permutation or bootstrap-based risk difference
      bounds would complete the Ω-4′ toolbox.
 
-9. **Audit Verification (current pass)**
-   - Exercising the full training pipeline uncovered latent shape mismatches in
-     the sliding-window moments and soft anchor regularisers as well as an
-     indexing bug inside the monotone spline transform.  These issues were
-     corrected in this pass, and the synthetic training script now runs to
-     completion under the default configuration.
-
 ## Recommendations
 
 1. Add a dedicated conformal calibration module that computes block-wise scores
