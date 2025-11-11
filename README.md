@@ -20,11 +20,14 @@ extended independently.
 - Stable linear state space model with learnable control kernels.
 - Spectrally normalised residual MLP enforcing small Lipschitz constants.
 - Training utilities with configurable regularisation weights, adversarial
-  diffeomorphism perturbations, consensus gates and gradient clipping.
+  diffeomorphism perturbations (with log-sum-exp robustness surrogates),
+  consensus gates and gradient clipping.
 - Validation helpers for MAE/RMSE assessment and a risk-difference gate based on
   statistical predictive intervals.
 - Block conformal calibration utilities that operate in the canonical domain
   and map calibrated intervals back to the raw series while honouring ν⁻¹ and τ.
+- Minimum-description-length penalties coupling the learned warp anchors and
+  value transforms for segmentation-aware regularisation.
 - Simple synthetic data generator to exercise the full pipeline end-to-end.
 
 ## Installation
