@@ -27,14 +27,18 @@ class SlidingWindowMoments(nn.Module):
             if window <= 1:
                 continue
             kernel = torch.ones(1, 1, window, device=series.device) / window
-            mean = torch.nn.functional.conv1d(
-                series.transpose(1, 2), kernel, padding=window // 2
-            ).transpose(1, 2)
-            var = torch.nn.functional.conv1d(
-                (series - mean).transpose(1, 2) ** 2,
+            transposed = series.transpose(1, 2)
+            mean_conv = torch.nn.functional.conv1d(transposed, kernel, padding=window // 2)
+            mean_conv = mean_conv[..., : series.shape[1]]
+            mean = mean_conv.transpose(1, 2)
+            centred = series - mean
+            var_conv = torch.nn.functional.conv1d(
+                centred.transpose(1, 2) ** 2,
                 kernel,
                 padding=window // 2,
-            ).transpose(1, 2)
+            )
+            var_conv = var_conv[..., : series.shape[1]]
+            var = var_conv.transpose(1, 2)
             total.append((mean - target_mean) ** 2 + (var - target_var) ** 2)
         if not total:
             return torch.tensor(0.0, device=series.device)
@@ -63,18 +67,45 @@ class STFTSoftAnchor(nn.Module):
     def forward(
         self,
         series: torch.Tensor,
-        template: torch.Tensor,
+        template: Optional[torch.Tensor],
         weight: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        if series.dim() == 1:
+            series = series.unsqueeze(0)
+        if series.dim() == 2:
+            flat_series = series
+            batch_channels = series.shape[0]
+        elif series.dim() == 3:
+            batch, length, channels = series.shape
+            flat_series = series.permute(0, 2, 1).reshape(-1, length)
+            batch_channels = batch * channels
+        else:
+            raise ValueError("series must have shape (batch, length[, channels])")
+
         stft = torch.stft(
-            series.squeeze(-1), self.n_fft, hop_length=self.hop_length, return_complex=True
+            flat_series,
+            self.n_fft,
+            hop_length=self.hop_length,
+            return_complex=True,
         )
         energy = stft.abs() ** self.power
         if self.log_amplitude:
             energy = torch.log1p(energy)
-            template = torch.log1p(template)
+            if template is not None:
+                template = torch.log1p(template)
+
+        if template is None:
+            template = torch.zeros_like(energy)
+        else:
+            if template.dim() == 3:
+                template = template.reshape(batch_channels, *template.shape[-2:])
+            if template.shape != energy.shape:
+                raise ValueError("template shape must match STFT energy shape")
+
         diff = energy - template
         if weight is not None:
+            if weight.shape != diff.shape:
+                raise ValueError("weight must match diff shape")
             diff = diff * weight
         return diff.pow(2).mean()
 

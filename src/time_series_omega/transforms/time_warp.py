@@ -143,8 +143,12 @@ class MonotoneTimeWarp(nn.Module):
         return grid, diagnostics
 
     def _second_difference(self, values: torch.Tensor) -> torch.Tensor:
-        pad = torch.nn.functional.pad(values, (1, 1), mode="replicate")
-        return pad[:-2] - 2 * pad[1:-1] + pad[2:]
+        padded = torch.nn.functional.pad(
+            values.unsqueeze(0).unsqueeze(0),
+            (1, 1),
+            mode="replicate",
+        ).squeeze(0).squeeze(0)
+        return padded[:-2] - 2 * padded[1:-1] + padded[2:]
 
     def curvature_penalty(self) -> torch.Tensor:
         grid = self.forward(return_diagnostics=False)  # type: ignore[arg-type]

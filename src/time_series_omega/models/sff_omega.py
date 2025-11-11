@@ -126,10 +126,10 @@ class SFFOmega(nn.Module):
         gauge = self.canonicalise(series, covariates=covariates, mask=mask)
         reg = {
             "smoothness": time_warp_penalty(self.time_warp),
-            "moments": self.sliding_moments(gauge.canonical.unsqueeze(-1)),
+            "moments": self.sliding_moments(gauge.canonical),
         }
         if template is not None:
-            reg["soft_anchor"] = self.soft_anchor(gauge.canonical.unsqueeze(-1), template)
+            reg["soft_anchor"] = self.soft_anchor(gauge.canonical, template)
         if cohort is not None:
             reg["consensus"] = consensus_energy(cohort)
         if gauge.covariates is not None and self.calendar is not None:
