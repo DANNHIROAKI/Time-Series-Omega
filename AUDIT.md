@@ -12,7 +12,7 @@ performed after integrating the changes in this commit.
 | Canonical regularisers | **✓ Implemented** | Sliding-window stability, STFT soft anchors, consensus energy, H-disc low-pass proxy. |
 | Stable dynamics + Lipschitz residual | **✓ Implemented** | Stable SSM core with spectrally normalised residual MLP. |
 | Adversarial robustness (Ω-5′) | **△ Partial** | Training loop supports TR/PGD-style perturbations but does not yet expose the log-sum-exp surrogate objective. |
-| Coverage calibration (Ω-2′/Ω-3′) | **✓ Implemented** | Canonical-domain block conformal calibrator with β-mixing correction and raw-domain mapping. |
+| Coverage calibration (Ω-2′/Ω-3′) | **✗ Missing** | Block conformal calibration utilities are not yet implemented. |
 | Segmentation & MDL penalties (Def. 1, Thm. E′) | **✗ Missing** | Time-warp component exposes anchors and complexity terms but there is no full segmentation/MDL search routine. |
 | Deployment gating (Ω-4′) | **△ Partial** | Validation SPI-style gate implemented; permutation/bootstrap estimators are not yet available. |
 
@@ -45,15 +45,14 @@ performed after integrating the changes in this commit.
    - Training metrics now log all regularisers, including calendar and H-disc
      terms.
 
-5. **Deployment Gate & Coverage**
+5. **Deployment Gate**
    - The `DeploymentGate` adopts a statistical predictive interval (SPI) style
      bound based on the empirical variance of loss differences. Additional gates
      (permutation/bootstrap) remain to be implemented.
-   - A new `BlockConformalCalibrator` fits block-wise residual quantiles in the
-     canonical domain, applies β-mixing corrections and maps calibrated
-     intervals back to the raw domain through ν⁻¹ and τ⁻¹, satisfying Ω-2′/Ω-3′.
 
 6. **Missing Components / Future Work**
+   - **Coverage calibration:** conformal block calibration operators and the raw
+     domain monotonicity mapping described in Ω-2′/Ω-3′ are not yet coded.
    - **Segmentation & MDL:** while the warp exposes anchors and complexity
      measures, the actual MDL-driven segmentation algorithm is absent.
    - **Template estimation:** external estimation of the soft-anchor template is
