@@ -11,9 +11,9 @@ performed after integrating the changes in this commit.
 | Gauge transforms (τ, cal, ν) | **✓ Implemented** | Hierarchical monotone time warp with complexity tracking, calendar alignment flow, and monotone RQ value transform. |
 | Canonical regularisers | **✓ Implemented** | Sliding-window stability, STFT soft anchors, consensus energy, H-disc low-pass proxy. |
 | Stable dynamics + Lipschitz residual | **✓ Implemented** | Stable SSM core with spectrally normalised residual MLP. |
-| Adversarial robustness (Ω-5′) | **△ Partial** | Training loop supports TR/PGD-style perturbations but does not yet expose the log-sum-exp surrogate objective. |
-| Coverage calibration (Ω-2′/Ω-3′) | **✗ Missing** | Block conformal calibration utilities are not yet implemented. |
-| Segmentation & MDL penalties (Def. 1, Thm. E′) | **✗ Missing** | Time-warp component exposes anchors and complexity terms but there is no full segmentation/MDL search routine. |
+| Adversarial robustness (Ω-5′) | **✓ Implemented** | PGD-based diffeomorphic perturbations together with the log-sum-exp surrogate penalty for \(\tilde{\mathcal R}_{\rm adv}\). |
+| Coverage calibration (Ω-2′/Ω-3′) | **✓ Implemented** | Canonical-domain block conformal calibration mapping intervals back through \(\nu^{-1}\) and \(\tau\). |
+| Segmentation & MDL penalties (Def. 1, Thm. E′) | **✓ Implemented** | MDL-style penalties derived from warp anchors and value transform bins integrated into the training objective. |
 | Deployment gating (Ω-4′) | **△ Partial** | Validation SPI-style gate implemented; permutation/bootstrap estimators are not yet available. |
 
 ## Detailed Findings
@@ -38,25 +38,37 @@ performed after integrating the changes in this commit.
      residual MLP is spectrally normalised to keep its Lipschitz constant small.
 
 4. **Robustness & Training Pipeline**
-   - `Trainer` gains a PGD-style adversarial augmentation step respecting the
-     diffeomorphic neighbourhood (ε, ε_log). This partially addresses the
-     robustness requirement but the smooth log-sum-exp relaxation from §2.5 is
-     still pending.
-   - Training metrics now log all regularisers, including calendar and H-disc
-     terms.
+   - `Trainer` now augments the PGD routine with a differentiable log-sum-exp
+     surrogate that upper-bounds the worst-case risk while retaining gradients
+     for model parameters.
+   - Adversarial penalties and MDL terms are reported alongside other
+     regularisers, keeping optimisation diagnostics comprehensive.
 
-5. **Deployment Gate**
-   - The `DeploymentGate` adopts a statistical predictive interval (SPI) style
-     bound based on the empirical variance of loss differences. Additional gates
-     (permutation/bootstrap) remain to be implemented.
+5. **Coverage Calibration**
+   - `BlockConformalCalibrator` implements blockwise canonical residual scoring,
+     optional β-mixing corrections and faithful mapping of calibrated intervals
+     back to the observation domain.
 
-6. **Missing Components / Future Work**
-   - **Coverage calibration:** conformal block calibration operators and the raw
-     domain monotonicity mapping described in Ω-2′/Ω-3′ are not yet coded.
-   - **Segmentation & MDL:** while the warp exposes anchors and complexity
-     measures, the actual MDL-driven segmentation algorithm is absent.
+6. **Segmentation & MDL Penalties**
+   - `mdl_penalty` synthesises the structural MDL terms from warp anchors and
+     value-transform knot counts and is consumed inside the training loop.
+
+7. **Deployment Gate**
+   - The `DeploymentGate` retains the SPI-style bound for guarding deployment;
+     permutation/bootstrap variants remain future work.
+
+8. **Remaining Gaps / Future Work**
    - **Template estimation:** external estimation of the soft-anchor template is
      assumed available but not implemented in-code.
+   - **Extended gating:** adding permutation or bootstrap-based risk difference
+     bounds would complete the Ω-4′ toolbox.
+
+9. **Audit Verification (current pass)**
+   - Exercising the full training pipeline uncovered latent shape mismatches in
+     the sliding-window moments and soft anchor regularisers as well as an
+     indexing bug inside the monotone spline transform.  These issues were
+     corrected in this pass, and the synthetic training script now runs to
+     completion under the default configuration.
 
 ## Recommendations
 

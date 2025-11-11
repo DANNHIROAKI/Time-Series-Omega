@@ -25,6 +25,8 @@ def _normalise_params(
 
 
 def _searchsorted(bin_locations: torch.Tensor, inputs: torch.Tensor) -> torch.Tensor:
+    """Return searchsorted indices matching the trailing channel shape."""
+
     mask = inputs[..., None] >= bin_locations[..., :-1]
     return mask.sum(dim=-1)
 
@@ -64,7 +66,7 @@ def _rational_quadratic_spline(
     cumheights = 2 * tail_bound * cumheights - tail_bound
 
     inputs_clamped = flat_inputs.clamp(-tail_bound + eps, tail_bound - eps)
-    bin_idx = _searchsorted(cumwidths, inputs_clamped.unsqueeze(-1)) - 1
+    bin_idx = _searchsorted(cumwidths, inputs_clamped) - 1
     bin_idx = bin_idx.clamp(min=0, max=widths.shape[-1] - 1)
     next_idx = (bin_idx + 1).clamp(max=widths.shape[-1])
 
