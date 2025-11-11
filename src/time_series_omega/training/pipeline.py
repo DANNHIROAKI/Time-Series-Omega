@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import torch
 from torch import nn
@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 
 from ..data.datasets import SequenceBatch
 from ..models.sff_omega import SFFOmega
+from ..segmentation import mdl_penalty
 
 
 @dataclass
@@ -20,6 +21,9 @@ class AdversarialConfig:
     epsilon_log: float = 0.05
     steps: int = 3
     step_size: float = 0.02
+    logsumexp_temperature: float = 0.01
+    penalty_weight: float = 0.0
+    include_clean: bool = True
 
 
 @dataclass
@@ -34,6 +38,9 @@ class TrainConfig:
     consensus_weight: float = 0.0
     calendar_weight: float = 0.1
     h_disc_weight: float = 0.1
+    mdl_structure_weight: float = 0.0
+    mdl_curvature_weight: float = 0.0
+    mdl_log_derivative_weight: float = 0.0
     grad_clip: Optional[float] = 1.0
     adversarial: AdversarialConfig = field(default_factory=AdversarialConfig)
 
@@ -48,27 +55,33 @@ class Trainer:
     def _adversarial_perturb(
         self,
         series: torch.Tensor,
+        target: torch.Tensor,
         mask: Optional[torch.Tensor],
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, List[torch.Tensor]]:
         if not self.config.adversarial.enabled:
-            return series
-        adv = series.clone().detach().requires_grad_(True)
+            return series, []
+        adv = series.clone().detach()
         epsilon = self.config.adversarial.epsilon
         epsilon_log = self.config.adversarial.epsilon_log
         step_size = self.config.adversarial.step_size
+        lower = series.amin()
+        upper = series.amax()
+        perturbations: List[torch.Tensor] = []
         for _ in range(self.config.adversarial.steps):
+            adv = adv.detach().requires_grad_(True)
             pred = self.model(adv, mask=mask)
-            target = series[:, -self.model.horizon :]
             loss = self.loss_fn(pred, target)
             grad = torch.autograd.grad(loss, adv, retain_graph=False, create_graph=False)[0]
             adv = adv + step_size * torch.sign(grad)
             delta = adv - series
             delta = torch.clamp(delta, -epsilon, epsilon)
-            adv = torch.clamp(series + delta, series.min() - epsilon_log, series.max() + epsilon_log)
+            adv = torch.clamp(series + delta, lower - epsilon_log, upper + epsilon_log)
             if mask is not None:
                 adv = adv * mask
-            adv = adv.detach().requires_grad_(True)
-        return adv.detach()
+            perturbations.append(adv.detach())
+        if not perturbations:
+            return series, []
+        return perturbations[-1], perturbations
 
     def step(self, batch: SequenceBatch, template: Optional[torch.Tensor] = None) -> Dict[str, float]:
         self.model.train()
@@ -76,7 +89,7 @@ class Trainer:
         covariates = None if batch.covariates is None else batch.covariates.to(self.config.device)
         mask = None if batch.mask is None else batch.mask.to(self.config.device)
         target = series[:, -self.model.horizon :]
-        adv_series = self._adversarial_perturb(series, mask)
+        adv_series, perturbations = self._adversarial_perturb(series, target, mask)
         pred, gauge = self.model(adv_series, covariates=covariates, mask=mask, return_gauge=True)
         loss = self.loss_fn(pred, target)
         regs = self.model.regularisation(adv_series, covariates=covariates, mask=mask, template=template, cohort=gauge.canonical)
@@ -90,6 +103,27 @@ class Trainer:
             loss = loss + self.config.calendar_weight * regs["calendar"]
         if "h_disc" in regs:
             loss = loss + self.config.h_disc_weight * regs["h_disc"]
+        mdl_terms = mdl_penalty(self.model.time_warp, self.model.value_transform, series.shape[1])
+        loss = loss + self.config.mdl_structure_weight * mdl_terms["mdl_structure"]
+        loss = loss + self.config.mdl_curvature_weight * mdl_terms["mdl_curvature"]
+        loss = loss + self.config.mdl_log_derivative_weight * mdl_terms["mdl_log_derivative"]
+        adv_penalty_value: Optional[torch.Tensor] = None
+        adv_cfg = self.config.adversarial
+        if adv_cfg.enabled and adv_cfg.penalty_weight > 0.0:
+            if adv_cfg.include_clean or perturbations:
+                candidate_losses = [loss]
+                if adv_cfg.include_clean:
+                    clean_pred = self.model(series, covariates=covariates, mask=mask)
+                    candidate_losses.append(self.loss_fn(clean_pred, target))
+                for idx, pert in enumerate(perturbations):
+                    if idx == len(perturbations) - 1:
+                        continue
+                    pert_pred = self.model(pert, covariates=covariates, mask=mask)
+                    candidate_losses.append(self.loss_fn(pert_pred, target))
+                losses_tensor = torch.stack(candidate_losses)
+                temperature = max(adv_cfg.logsumexp_temperature, 1e-6)
+                adv_penalty_value = temperature * torch.logsumexp(losses_tensor / temperature, dim=0)
+                loss = loss + adv_cfg.penalty_weight * adv_penalty_value
         self.optimizer.zero_grad()
         loss.backward()
         if self.config.grad_clip is not None:
@@ -97,6 +131,9 @@ class Trainer:
         self.optimizer.step()
         metrics = {"loss": float(loss.item())}
         metrics.update({k: float(v.detach().item()) for k, v in regs.items()})
+        metrics.update({k: float(v.detach().item()) for k, v in mdl_terms.items()})
+        if adv_penalty_value is not None:
+            metrics["adv_penalty"] = float(adv_penalty_value.detach().item())
         return metrics
 
     def fit(self, loader: DataLoader[SequenceBatch], template: Optional[torch.Tensor] = None) -> None:
